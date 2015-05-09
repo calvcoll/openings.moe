@@ -24,6 +24,7 @@ type videoInfo struct {
 }
 
 var homeURL = "http://openings.moe/"
+var directory = ""
 var client = &http.Client{}
 var wg sync.WaitGroup
 
@@ -43,7 +44,12 @@ func makeVideoAndSend(cs chan videoInfo) {
 	if err != nil {
 		fmt.Println("error:", err)
 	}
-	cs <- video
+	if _, err := os.Stat(directory + video.Videofname); os.IsNotExist(err) {
+		cs <- video
+	} else {
+		fmt.Println(video.Videofname + " already exists, trying for another.")
+		makeVideoAndSend(cs)
+	}
 }
 
 func recieveVideoAndSave(cs chan videoInfo) {
@@ -70,14 +76,16 @@ func main() {
 	args := os.Args[1:]
 
 	j := 5
+
 	if !reflect.DeepEqual(args, make([]string, 0)) {
 		j64, _ := strconv.ParseInt(args[0], 10, 32) //sets j to be amount specified by args.
 		j = int(j64)
 	}
-	cs := make(chan videoInfo)
+
+	cs := make(chan videoInfo, j) // becomes async, and doesn't block as badly.
+	wg.Add(j)
 
 	for i := 0; i < j; i++ {
-		wg.Add(1)
 		go makeVideoAndSend(cs)
 		go recieveVideoAndSave(cs)
 	}
