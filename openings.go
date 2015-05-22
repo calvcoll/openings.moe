@@ -2,11 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
-	"reflect"
 	"strconv"
 	"sync"
 )
@@ -23,22 +23,24 @@ type videoInfo struct {
 	Videofname string
 }
 
-var homeURL = "http://openings.moe/"
+var domain = "openings.moe"
+var homeURL = "http://" + domain + "/"
 var directory = ""
 var client = &http.Client{}
 var wg sync.WaitGroup
 
+var verbose bool
+var quiet bool
+
 func makeVideoAndSend(cs chan videoInfo) {
 	req, _ := http.NewRequest("GET", (homeURL + "nextvideo.php"), nil)
-	req.Header.Add("Host", "openings.moe")
+	req.Header.Add("Host", domain)
 	req.Header.Add("Referer", homeURL)
 	resp, _ := client.Do(req)
 	var body []byte
 	if resp != nil {
 		body, _ = ioutil.ReadAll(resp.Body)
 	}
-	// response := string(body)
-	// fmt.Println(response)
 	var video videoInfo
 	err := json.Unmarshal(body, &video)
 	if err != nil {
@@ -47,20 +49,21 @@ func makeVideoAndSend(cs chan videoInfo) {
 	if _, err := os.Stat(directory + video.Videofname); os.IsNotExist(err) {
 		cs <- video
 	} else {
-		fmt.Println(video.Videofname + " already exists, trying for another.")
+		if verbose {
+			fmt.Println(video.Videofname + " already exists, trying for another.")
+		}
 		makeVideoAndSend(cs)
 	}
 }
 
 func recieveVideoAndSave(cs chan videoInfo) {
-	// needed because otherwise main will close before these are done.
 	defer wg.Done()
 	video := <-cs
 	if video.Success {
 		out, _ := os.Create(video.Videofname)
 		defer out.Close()
 		req, _ := http.NewRequest("GET", homeURL+video.Videourl, nil)
-		req.Header.Add("Host", "openings.moe")
+		req.Header.Add("Host", domain)
 		req.Header.Add("Referer", homeURL)
 		fileRequest, _ := client.Do(req)
 		var file []byte
@@ -68,26 +71,34 @@ func recieveVideoAndSave(cs chan videoInfo) {
 			file, _ = ioutil.ReadAll(fileRequest.Body)
 		}
 		out.Write(file)
-		fmt.Printf("%+v has been successfully downloaded!\n", video.Videofname)
+		if !quiet {
+			fmt.Printf("%+v has been successfully downloaded!\n", video.Videofname)
+		}
 	}
 }
 
 func main() {
-	args := os.Args[1:]
-
-	j := 5
-
-	if !reflect.DeepEqual(args, make([]string, 0)) {
-		j64, _ := strconv.ParseInt(args[0], 10, 32) //sets j to be amount specified by args.
-		j = int(j64)
+	verbose = *flag.Bool("v", false, "Verboses outputs when file already downloaded.")
+	quiet = *flag.Bool("q", false, "Quietens output.")
+	jStr := flag.Arg(0)
+	if jStr == "" {
+		jStr = "5" //so it doesn't throw an error when not specified
 	}
+	j, err := strconv.Atoi(jStr)
 
-	cs := make(chan videoInfo, j) // becomes async, and doesn't block as badly.
-	wg.Add(j)
+	if err == nil {
+		cs := make(chan videoInfo, j) // becomes async, and doesn't block as badly.
+		wg.Add(j)
 
-	for i := 0; i < j; i++ {
-		go makeVideoAndSend(cs)
-		go recieveVideoAndSave(cs)
+		for i := 0; i < j; i++ {
+			go makeVideoAndSend(cs)
+			go recieveVideoAndSave(cs)
+		}
+		wg.Wait()
+		if quiet {
+			fmt.Println("All " + string(j) + " videos downloaded.")
+		}
+	} else {
+		fmt.Println("Select a number!")
 	}
-	wg.Wait()
 }
