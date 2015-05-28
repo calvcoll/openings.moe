@@ -28,6 +28,8 @@ var homeURL = "http://" + domain + "/"
 var directory = ""
 var client = &http.Client{}
 var wg sync.WaitGroup
+var recursion = 0
+var recursionLimit = 500
 
 func makeVideoAndSend(cs chan videoInfo) {
 	req, _ := http.NewRequest("GET", (homeURL + "nextvideo.php"), nil)
@@ -46,10 +48,16 @@ func makeVideoAndSend(cs chan videoInfo) {
 	if _, err := os.Stat(directory + video.Videofname); os.IsNotExist(err) {
 		cs <- video
 	} else {
+		recursion++
 		if verbose {
 			fmt.Println(video.Videofname + " already exists, trying for another.")
 		}
-		makeVideoAndSend(cs)
+		if recursion < recursionLimit {
+			makeVideoAndSend(cs)
+		} else {
+			fakeVideo := videoInfo{false, "", videoName{"", ""}, ""}
+			cs <- fakeVideo
+		}
 	}
 }
 
@@ -71,12 +79,15 @@ func recieveVideoAndSave(cs chan videoInfo) {
 		if !quiet {
 			fmt.Printf("%+v has been successfully downloaded!\n", video.Videofname)
 		}
+	} else {
+		fail++
 	}
 }
 
 var verbose bool
 var quiet bool
 var buffer int
+var fail = 0
 
 var verboseFlag = flag.Bool("verbose", false, "Verboses outputs when file already downloaded.")
 var quietFlag = flag.Bool("quiet", false, "Quietens output.")
@@ -94,23 +105,27 @@ func main() {
 	quiet = *quietFlag
 	buffer = *bufferFlag
 
-	jStr := flag.Arg(0)
-	if jStr == "" {
-		jStr = "5" //so it doesn't throw an error when not specified
+	numStr := flag.Arg(0)
+	if numStr == "" {
+		numStr = "5" //so it doesn't throw an error when not specified
 	}
-	j, err := strconv.Atoi(jStr)
+	num, err := strconv.Atoi(numStr)
 
 	if err == nil {
 		cs := make(chan videoInfo, buffer) // becomes async, and doesn't block as badly.
-		wg.Add(j)
+		wg.Add(num)
 
-		for i := 0; i < j; i++ {
+		for i := 0; i < num; i++ {
 			go makeVideoAndSend(cs)
 			go recieveVideoAndSave(cs)
 		}
 		wg.Wait()
-		if quiet {
-			fmt.Println("All " + string(j) + " videos downloaded.")
+		if !quiet {
+			if fail == 0 {
+				fmt.Println("All " + strconv.Itoa(num) + " videos downloaded.")
+			} else {
+				fmt.Println(strconv.Itoa(fail) + " videos failed to download! Have you downloaded everything?")
+			}
 		}
 	} else {
 		fmt.Println("Select a number!")
