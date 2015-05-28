@@ -29,9 +29,6 @@ var directory = ""
 var client = &http.Client{}
 var wg sync.WaitGroup
 
-var verbose bool
-var quiet bool
-
 func makeVideoAndSend(cs chan videoInfo) {
 	req, _ := http.NewRequest("GET", (homeURL + "nextvideo.php"), nil)
 	req.Header.Add("Host", domain)
@@ -77,18 +74,25 @@ func recieveVideoAndSave(cs chan videoInfo) {
 	}
 }
 
+var verbose bool
+var quiet bool
+var buffer int
+
 var verboseFlag = flag.Bool("verbose", false, "Verboses outputs when file already downloaded.")
 var quietFlag = flag.Bool("quiet", false, "Quietens output.")
+var bufferFlag = flag.Int("buffer", 5, "Sets the amount of videos that can download simulaneously.")
 
 func init() {
 	flag.BoolVar(verboseFlag, "v", false, "Verboses outputs when file already downloaded.")
 	flag.BoolVar(quietFlag, "q", false, "Quietens output.")
+	flag.IntVar(bufferFlag, "b", 5, "Sets the amount of videos that can download simulaneously.")
 }
 
 func main() {
 	flag.Parse()
 	verbose = *verboseFlag
 	quiet = *quietFlag
+	buffer = *bufferFlag
 
 	jStr := flag.Arg(0)
 	if jStr == "" {
@@ -97,7 +101,7 @@ func main() {
 	j, err := strconv.Atoi(jStr)
 
 	if err == nil {
-		cs := make(chan videoInfo, j) // becomes async, and doesn't block as badly.
+		cs := make(chan videoInfo, buffer) // becomes async, and doesn't block as badly.
 		wg.Add(j)
 
 		for i := 0; i < j; i++ {
