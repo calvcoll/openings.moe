@@ -77,9 +77,19 @@ func recieveVideoAndSave(cs chan videoInfo) {
 	}
 }
 
+var verboseFlag = flag.Bool("verbose", false, "Verboses outputs when file already downloaded.")
+var quietFlag = flag.Bool("quiet", false, "Quietens output.")
+
+func init() {
+	flag.BoolVar(verboseFlag, "v", false, "Verboses outputs when file already downloaded.")
+	flag.BoolVar(quietFlag, "q", false, "Quietens output.")
+}
+
 func main() {
-	verbose = *flag.Bool("v", false, "Verboses outputs when file already downloaded.")
-	quiet = *flag.Bool("q", false, "Quietens output.")
+	flag.Parse()
+	verbose = *verboseFlag
+	quiet = *quietFlag
+
 	jStr := flag.Arg(0)
 	if jStr == "" {
 		jStr = "5" //so it doesn't throw an error when not specified
